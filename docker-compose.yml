@@ -1,0 +1,32 @@
+version: '3.8'
+
+services:
+  chronoscout:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: chronoscout:latest
+    container_name: ugreen-chronoscout
+    restart: unless-stopped
+    ports:
+      - "3000:3000"
+    environment:
+      - NODE_ENV=production
+      - PORT=3000
+      # Optional: Add your free official eBay Developer credentials from developer.ebay.com
+      # - EBAY_CLIENT_ID=your_client_id_here
+      # - EBAY_CLIENT_SECRET=your_client_secret_here
+      # - EBAY_MARKETPLACE=EBAY_DE # or EBAY_CH, EBAY_FR, EBAY_IT
+    volumes:
+      # Optional persistence volume for custom search presets and bookmarks
+      - ./data:/app/data
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://localhost:3000/api/stats"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"

@@ -1,0 +1,6 @@
+{
+  "name": "ChronoScout - Swiss & Glashütte Watch Gem Hunter",
+  "description": "Self-contained European & Swiss wristwatch discovery tool for finding overlooked eBay auctions ending soon and undervalued Buy It Now gems.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
