@@ -14,11 +14,13 @@ services:
       - NODE_ENV=production
       - PORT=3000
       # Optional: Add your free official eBay Developer credentials from developer.ebay.com
-      # - EBAY_CLIENT_ID=your_client_id_here
-      # - EBAY_CLIENT_SECRET=your_client_secret_here
-      # - EBAY_MARKETPLACE=EBAY_DE # or EBAY_CH, EBAY_FR, EBAY_IT
+      # - EBAY_CLIENT_ID=your_app_id_here
+      # - EBAY_CLIENT_SECRET=your_cert_id_here
+      # - EBAY_DEV_ID=your_dev_id_here
+      # - EBAY_ENVIRONMENT=PRODUCTION # or SANDBOX
+      # - EBAY_MARKETPLACE=EBAY_DE # or EBAY_CH, EBAY_FR, EBAY_IT, EBAY_AT
     volumes:
-      # Optional persistence volume for custom search presets and bookmarks
+      # Persistent watchlists, saved keyset configuration, and custom alert criteria
       - ./data:/app/data
     healthcheck:
       test: ["CMD", "wget", "-qO-", "http://localhost:3000/api/stats"]

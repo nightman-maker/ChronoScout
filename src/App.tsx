@@ -9,6 +9,7 @@ import { NasDeployModal } from './components/NasDeployModal.tsx';
 import { EbayPresetsModal } from './components/EbayPresetsModal.tsx';
 import { LiveDataModal } from './components/LiveDataModal.tsx';
 import { AddWatchModal } from './components/AddWatchModal.tsx';
+import { EbayKeysetModal } from './components/EbayKeysetModal.tsx';
 import { WatchListing, SortField, filterAndSortWatches } from './utils/gemEvaluator.ts';
 import { generateLiveListings } from './data/mockListings.ts';
 import {
@@ -22,6 +23,7 @@ import {
   Layers,
   Flame,
   Zap,
+  Key,
 } from 'lucide-react';
 
 export default function App() {
@@ -46,6 +48,8 @@ export default function App() {
   const [showPresetsModal, setShowPresetsModal] = useState(false);
   const [showLiveDataModal, setShowLiveDataModal] = useState(false);
   const [showAddWatchModal, setShowAddWatchModal] = useState(false);
+  const [showEbayKeysetModal, setShowEbayKeysetModal] = useState(false);
+
   const [ebayStatus, setEbayStatus] = useState({
     isConfigured: false,
     mode: 'smart_radar_mode',
@@ -53,7 +57,7 @@ export default function App() {
   });
 
   // Fetch eBay status
-  useEffect(() => {
+  const fetchEbayStatus = useCallback(() => {
     fetch('/api/ebay/status')
       .then((res) => res.json())
       .then((data) => {
@@ -67,6 +71,10 @@ export default function App() {
       })
       .catch(() => {});
   }, []);
+
+  useEffect(() => {
+    fetchEbayStatus();
+  }, [fetchEbayStatus]);
 
   // Data state
   const [watches, setWatches] = useState<WatchListing[]>(() => generateLiveListings(Date.now()));
@@ -284,6 +292,8 @@ export default function App() {
         setSelectedCurrency={setSelectedCurrency}
         onOpenLiveData={() => setShowLiveDataModal(true)}
         onOpenAddWatch={() => setShowAddWatchModal(true)}
+        ebayStatus={ebayStatus}
+        onOpenEbayKeyset={() => setShowEbayKeysetModal(true)}
       />
 
       {/* Live Radar Pulse Banner */}
@@ -433,6 +443,15 @@ export default function App() {
 
           <div className="flex flex-wrap items-center gap-4 text-slate-400">
             <button
+              onClick={() => setShowEbayKeysetModal(true)}
+              aria-label="Configure eBay Keyset in footer"
+              className="text-amber-400 hover:underline flex items-center space-x-1"
+            >
+              <Key className="w-3.5 h-3.5" />
+              <span>eBay Keyset Integration</span>
+            </button>
+            <span>•</span>
+            <button
               onClick={() => setShowNasModal(true)}
               aria-label="View UGREEN NAS Docker Guide in footer"
               className="text-emerald-400 hover:underline flex items-center space-x-1"
@@ -490,6 +509,22 @@ export default function App() {
         isOpen={showLiveDataModal}
         onClose={() => setShowLiveDataModal(false)}
         apiStatus={ebayStatus}
+        onOpenKeysetModal={() => setShowEbayKeysetModal(true)}
+      />
+
+      <AddWatchModal
+        isOpen={showAddWatchModal}
+        onClose={() => setShowAddWatchModal(false)}
+        onAddWatch={handleAddWatch}
+      />
+
+      <EbayKeysetModal
+        isOpen={showEbayKeysetModal}
+        onClose={() => setShowEbayKeysetModal(false)}
+        onKeysetUpdated={() => {
+          fetchEbayStatus();
+          handleRefresh();
+        }}
       />
     </div>
   );

@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Server, Copy, Check, Terminal, ExternalLink, HardDrive, ShieldCheck, CheckCircle2 } from 'lucide-react';
+import { Server, Copy, Check, Terminal, ExternalLink, HardDrive, ShieldCheck, CheckCircle2, X } from 'lucide-react';
 
 interface NasDeployModalProps {
   isOpen: boolean;
@@ -88,7 +88,7 @@ services:
             aria-label="Close deployment guide"
             className="p-2 rounded-xl bg-slate-800/80 text-slate-400 hover:text-slate-100 border border-slate-700 transition-colors"
           >
-            ✕
+            <X className="w-4 h-4" />
           </button>
         </div>
 
