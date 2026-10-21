@@ -1,9 +1,11 @@
 import express from 'express';
 import path from 'path';
+import fs from 'fs';
 import { fileURLToPath } from 'url';
 import { generateLiveListings } from './src/data/mockListings.ts';
 import { filterAndSortWatches, FilterOptions, SortField, WatchListing } from './src/utils/gemEvaluator.ts';
-import { fetchLiveEbayWatches } from './src/services/ebayApi.ts';
+import { fetchLiveEbayWatches, testEbayConnection, invalidateEbayTokenCache } from './src/services/ebayApi.ts';
+import { EbayKeyset, validateEbayKeyset, maskEbayKey, generateDockerEnv, generateDockerComposeEnv } from './src/utils/ebayKeyset.ts';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -13,6 +15,47 @@ const PORT = process.env.PORT ? parseInt(process.env.PORT, 10) : 3000;
 
 app.use(express.json());
 
+// Persistent keyset configuration file path
+const DATA_DIR = path.resolve(__dirname, 'data');
+const KEYSET_FILE = path.resolve(DATA_DIR, 'ebay_keyset.json');
+
+// Initialize in-memory keyset from disk or env vars
+let activeKeyset: EbayKeyset = {
+  clientId: process.env.EBAY_CLIENT_ID || '',
+  clientSecret: process.env.EBAY_CLIENT_SECRET || '',
+  devId: process.env.EBAY_DEV_ID || '',
+  environment: (process.env.EBAY_ENVIRONMENT as 'PRODUCTION' | 'SANDBOX') || 'PRODUCTION',
+  marketplaceId: process.env.EBAY_MARKETPLACE || 'EBAY_DE',
+  enabled: Boolean(process.env.EBAY_CLIENT_ID && process.env.EBAY_CLIENT_SECRET),
+};
+
+try {
+  if (fs.existsSync(KEYSET_FILE)) {
+    const raw = fs.readFileSync(KEYSET_FILE, 'utf-8');
+    const parsed = JSON.parse(raw);
+    if (parsed.clientId && parsed.clientSecret) {
+      activeKeyset = {
+        ...activeKeyset,
+        ...parsed,
+        enabled: parsed.enabled !== false,
+      };
+    }
+  }
+} catch (err) {
+  console.warn('Could not load persistent keyset file:', err);
+}
+
+function saveKeysetToDisk(keyset: EbayKeyset) {
+  try {
+    if (!fs.existsSync(DATA_DIR)) {
+      fs.mkdirSync(DATA_DIR, { recursive: true });
+    }
+    fs.writeFileSync(KEYSET_FILE, JSON.stringify(keyset, null, 2), 'utf-8');
+  } catch (err) {
+    console.warn('Could not save keyset to disk (will remain in memory):', err);
+  }
+}
+
 // In-memory state
 let currentLiveTime = Date.now();
 let cachedWatches: WatchListing[] = generateLiveListings(currentLiveTime);
@@ -20,15 +63,127 @@ const watchlistIds = new Set<string>();
 
 // Endpoint: Check eBay API Configuration status
 app.get('/api/ebay/status', (_req, res) => {
-  const isConfigured = Boolean(process.env.EBAY_CLIENT_ID && process.env.EBAY_CLIENT_SECRET);
+  const isConfigured = Boolean(
+    activeKeyset.enabled && activeKeyset.clientId && activeKeyset.clientSecret
+  );
+
   res.json({
     success: true,
     isConfigured,
     mode: isConfigured ? 'live_api' : 'smart_radar_mode',
-    marketplace: process.env.EBAY_MARKETPLACE || 'EBAY_DE',
+    environment: activeKeyset.environment,
+    marketplace: activeKeyset.marketplaceId,
+    maskedClientId: maskEbayKey(activeKeyset.clientId),
+    hasDevId: Boolean(activeKeyset.devId),
+    lastTested: activeKeyset.lastTested || null,
+    lastTestStatus: activeKeyset.lastTestStatus || null,
+    lastTestMessage: activeKeyset.lastTestMessage || null,
     message: isConfigured
-      ? 'Connected to official eBay Developer Browse API'
+      ? `Connected to official eBay Developer Browse API (${activeKeyset.environment})`
       : 'Running in Smart Radar Mode with live search routing',
+  });
+});
+
+// Endpoint: Test connection to eBay OAuth
+app.post('/api/ebay/test-connection', async (req, res) => {
+  const { clientId, clientSecret, devId, environment } = req.body;
+
+  const testParams = {
+    clientId: clientId || activeKeyset.clientId,
+    clientSecret: clientSecret || activeKeyset.clientSecret,
+    devId: devId ?? activeKeyset.devId,
+    environment: environment || activeKeyset.environment,
+  };
+
+  const validation = validateEbayKeyset(testParams);
+  if (!validation.isValid) {
+    return res.status(400).json({
+      success: false,
+      message: 'Invalid keyset parameters.',
+      errors: validation.errors,
+    });
+  }
+
+  const result = await testEbayConnection(testParams);
+
+  // Update in-memory test timestamp
+  if (testParams.clientId === activeKeyset.clientId) {
+    activeKeyset.lastTested = Date.now();
+    activeKeyset.lastTestStatus = result.success ? 'success' : 'error';
+    activeKeyset.lastTestMessage = result.message;
+    saveKeysetToDisk(activeKeyset);
+  }
+
+  res.json(result);
+});
+
+// Endpoint: Save / Update eBay Keyset
+app.post('/api/ebay/keyset', async (req, res) => {
+  const { clientId, clientSecret, devId, environment, marketplaceId, enabled } = req.body;
+
+  const newKeyset: EbayKeyset = {
+    clientId: (clientId || '').trim(),
+    clientSecret: (clientSecret || '').trim(),
+    devId: (devId || '').trim(),
+    environment: environment === 'SANDBOX' ? 'SANDBOX' : 'PRODUCTION',
+    marketplaceId: marketplaceId || 'EBAY_DE',
+    enabled: enabled !== false,
+  };
+
+  const validation = validateEbayKeyset(newKeyset);
+  if (!validation.isValid) {
+    return res.status(400).json({
+      success: false,
+      message: 'Validation failed for eBay Keyset.',
+      errors: validation.errors,
+    });
+  }
+
+  // Invalidate old token cache
+  invalidateEbayTokenCache();
+
+  // Test live connection with the new keys
+  const testResult = await testEbayConnection(newKeyset);
+
+  newKeyset.lastTested = Date.now();
+  newKeyset.lastTestStatus = testResult.success ? 'success' : 'error';
+  newKeyset.lastTestMessage = testResult.message;
+
+  activeKeyset = newKeyset;
+  saveKeysetToDisk(activeKeyset);
+
+  res.json({
+    success: true,
+    message: testResult.success
+      ? 'eBay Keyset saved and successfully verified!'
+      : `eBay Keyset saved, but eBay test connection failed: ${testResult.message}`,
+    testResult,
+    keysetStatus: {
+      isConfigured: activeKeyset.enabled && Boolean(activeKeyset.clientId && activeKeyset.clientSecret),
+      environment: activeKeyset.environment,
+      marketplace: activeKeyset.marketplaceId,
+      maskedClientId: maskEbayKey(activeKeyset.clientId),
+      hasDevId: Boolean(activeKeyset.devId),
+    },
+  });
+});
+
+// Endpoint: Disconnect / Reset eBay Keyset
+app.post('/api/ebay/disconnect', (_req, res) => {
+  invalidateEbayTokenCache();
+  activeKeyset = {
+    clientId: '',
+    clientSecret: '',
+    devId: '',
+    environment: 'PRODUCTION',
+    marketplaceId: 'EBAY_DE',
+    enabled: false,
+  };
+  saveKeysetToDisk(activeKeyset);
+
+  res.json({
+    success: true,
+    message: 'eBay Keyset disconnected. App reverted to Smart Radar Mode.',
   });
 });
 
@@ -61,13 +216,14 @@ app.get('/api/watches', async (req, res) => {
 
   currentLiveTime = Date.now();
 
-  // If live eBay API keys are set, query the official Browse API
-  if (process.env.EBAY_CLIENT_ID && process.env.EBAY_CLIENT_SECRET) {
+  // If live eBay API keys are configured and active, query the official Browse API
+  if (activeKeyset.enabled && activeKeyset.clientId && activeKeyset.clientSecret) {
     try {
       const liveItems = await fetchLiveEbayWatches({
-        clientId: process.env.EBAY_CLIENT_ID,
-        clientSecret: process.env.EBAY_CLIENT_SECRET,
-        marketplaceId: process.env.EBAY_MARKETPLACE || 'EBAY_DE',
+        clientId: activeKeyset.clientId,
+        clientSecret: activeKeyset.clientSecret,
+        environment: activeKeyset.environment,
+        marketplaceId: activeKeyset.marketplaceId,
         query: typeof q === 'string' ? q : undefined,
       });
       if (liveItems && liveItems.length > 0) {
@@ -100,13 +256,34 @@ app.get('/api/watches', async (req, res) => {
 });
 
 // Endpoint: POST /api/watches/refresh
-app.post('/api/watches/refresh', (_req, res) => {
-  // Advance time or generate fresh dynamic listings
+app.post('/api/watches/refresh', async (_req, res) => {
   currentLiveTime = Date.now();
-  cachedWatches = generateLiveListings(currentLiveTime);
+
+  if (activeKeyset.enabled && activeKeyset.clientId && activeKeyset.clientSecret) {
+    try {
+      const liveItems = await fetchLiveEbayWatches({
+        clientId: activeKeyset.clientId,
+        clientSecret: activeKeyset.clientSecret,
+        environment: activeKeyset.environment,
+        marketplaceId: activeKeyset.marketplaceId,
+      });
+      if (liveItems && liveItems.length > 0) {
+        cachedWatches = liveItems;
+      } else {
+        cachedWatches = generateLiveListings(currentLiveTime);
+      }
+    } catch {
+      cachedWatches = generateLiveListings(currentLiveTime);
+    }
+  } else {
+    cachedWatches = generateLiveListings(currentLiveTime);
+  }
+
   res.json({
     success: true,
-    message: 'Scanned eBay European portals & refreshed active auctions',
+    message: activeKeyset.enabled && activeKeyset.clientId
+      ? `Queried eBay ${activeKeyset.marketplaceId} Live Browse API`
+      : 'Scanned eBay European portals & refreshed active auctions',
     timestamp: currentLiveTime,
     totalGems: cachedWatches.length,
   });
@@ -216,11 +393,7 @@ app.get('/api/ebay-presets', (_req, res) => {
 
 // Endpoint: Docker instructions and configs for Ugreen NAS
 app.get('/api/docker-info', (_req, res) => {
-  res.json({
-    success: true,
-    nasName: 'UGREEN NAS (UGOS)',
-    containerPort: 3000,
-    dockerComposeYaml: `version: '3.8'
+  const composeSnippet = `version: '3.8'
 
 services:
   chronoscout:
@@ -230,9 +403,7 @@ services:
     restart: unless-stopped
     ports:
       - "3000:3000"
-    environment:
-      - NODE_ENV=production
-      - PORT=3000
+${generateDockerComposeEnv(activeKeyset)}
     volumes:
       - ./data:/app/data
     healthcheck:
@@ -240,8 +411,15 @@ services:
       interval: 30s
       timeout: 5s
       retries: 3
-`,
+`;
+
+  res.json({
+    success: true,
+    nasName: 'UGREEN NAS (UGOS)',
+    containerPort: 3000,
+    dockerComposeYaml: composeSnippet,
     dockerRunCommand: `docker run -d --name ugreen-chronoscout --restart unless-stopped -p 3000:3000 chronoscout:latest`,
+    dockerEnv: generateDockerEnv(activeKeyset),
   });
 });
 

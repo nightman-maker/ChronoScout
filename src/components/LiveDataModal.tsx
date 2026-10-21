@@ -1,5 +1,5 @@
 import React from 'react';
-import { Key, ShieldCheck, Zap, Globe, HardDrive, CheckCircle2, ArrowRight } from 'lucide-react';
+import { Key, ShieldCheck, Zap, Globe, HardDrive, CheckCircle2, ArrowRight, X } from 'lucide-react';
 
 interface LiveDataModalProps {
   isOpen: boolean;
@@ -9,9 +9,15 @@ interface LiveDataModalProps {
     mode: string;
     marketplace: string;
   };
+  onOpenKeysetModal?: () => void;
 }
 
-export const LiveDataModal: React.FC<LiveDataModalProps> = ({ isOpen, onClose, apiStatus }) => {
+export const LiveDataModal: React.FC<LiveDataModalProps> = ({
+  isOpen,
+  onClose,
+  apiStatus,
+  onOpenKeysetModal,
+}) => {
   if (!isOpen) return null;
 
   return (
@@ -49,7 +55,7 @@ export const LiveDataModal: React.FC<LiveDataModalProps> = ({ isOpen, onClose, a
             aria-label="Close live data modal"
             className="p-2 rounded-xl bg-slate-800/80 text-slate-400 hover:text-slate-100 border border-slate-700 transition-colors"
           >
-            ✕
+            <X className="w-4 h-4" />
           </button>
         </div>
 
@@ -59,7 +65,7 @@ export const LiveDataModal: React.FC<LiveDataModalProps> = ({ isOpen, onClose, a
           <div className="p-4 rounded-2xl bg-slate-950 border border-slate-800 space-y-2">
             <div className="flex items-center justify-between text-xs font-semibold text-slate-200">
               <span className="flex items-center space-x-2">
-                <span className="w-2.5 h-2.5 rounded-full bg-emerald-400 animate-pulse"></span>
+                <span className={`w-2.5 h-2.5 rounded-full ${apiStatus.isConfigured ? 'bg-emerald-400 animate-pulse' : 'bg-amber-400'}`}></span>
                 <span>Active Data Architecture</span>
               </span>
               <span className="font-mono text-amber-300">Current Marketplace: {apiStatus.marketplace}</span>
@@ -110,33 +116,53 @@ export const LiveDataModal: React.FC<LiveDataModalProps> = ({ isOpen, onClose, a
             <div className="flex items-center justify-between">
               <span className="text-sm font-bold text-slate-200 flex items-center space-x-2">
                 <Key className="w-4 h-4 text-emerald-400" />
-                <span>Mode 2: Official eBay Developer Key (Optional Background Sync)</span>
+                <span>Mode 2: Official eBay Developer Keyset (Live Background Browse API)</span>
               </span>
-              <span className="text-[10px] bg-slate-800 text-slate-400 px-2 py-0.5 rounded-full">
-                Optional
+              <span className={`text-[10px] px-2 py-0.5 rounded-full font-semibold ${
+                apiStatus.isConfigured
+                  ? 'bg-emerald-500/20 text-emerald-300 border border-emerald-500/30'
+                  : 'bg-slate-800 text-slate-400'
+              }`}>
+                {apiStatus.isConfigured ? 'Connected' : 'Optional Keyset'}
               </span>
             </div>
             <p className="text-slate-300 leading-relaxed">
-              If you ever want automated 24/7 background syncing inside your UGREEN NAS without clicking, you can create a free eBay Developer account in 2 minutes:
+              If you want automated background querying directly against official eBay Browse API endpoints:
             </p>
 
             <div className="space-y-2 pt-1">
               <ol className="list-decimal pl-5 space-y-1.5 text-slate-400">
                 <li>
                   <strong className="text-slate-200">100% Free:</strong> Go to{' '}
-                  <a href="https://developer.ebay.com" target="_blank" rel="noopener noreferrer" className="text-amber-400 underline">
+                  <a href="https://developer.ebay.com/signin" target="_blank" rel="noopener noreferrer" className="text-amber-400 underline">
                     developer.ebay.com
                   </a>{' '}
-                  and sign in with your normal eBay account (no business or credit card required).
+                  and sign in with your normal eBay account.
                 </li>
                 <li>
-                  <strong className="text-slate-200">Generate Keyset:</strong> Click <em>&quot;Create a Keyset&quot;</em> to instantly get your <strong>Client ID (App ID)</strong> and <strong>Client Secret (Cert ID)</strong>.
+                  <strong className="text-slate-200">Generate Keyset:</strong> Click <em>&quot;Create a Keyset&quot;</em> to get your <strong>App ID (Client ID)</strong> and <strong>Cert ID (Client Secret)</strong>.
                 </li>
                 <li>
-                  <strong className="text-slate-200">Add to Docker:</strong> Paste them into your UGREEN NAS <code>docker-compose.yml</code> or <code>.env</code> file.
+                  <strong className="text-slate-200">Add to ChronoScout:</strong> Click the button below to paste your keys, test the connection live, and activate official API streaming!
                 </li>
               </ol>
             </div>
+
+            {onOpenKeysetModal && (
+              <div className="pt-2">
+                <button
+                  type="button"
+                  onClick={() => {
+                    onClose();
+                    onOpenKeysetModal();
+                  }}
+                  className="flex items-center space-x-2 px-4 py-2 rounded-xl bg-amber-500 hover:bg-amber-400 text-slate-950 font-bold text-xs transition-colors shadow-sm"
+                >
+                  <Key className="w-4 h-4" />
+                  <span>Configure eBay Keyset Now &rarr;</span>
+                </button>
+              </div>
+            )}
           </div>
 
           {/* Home NAS Advantage */}
