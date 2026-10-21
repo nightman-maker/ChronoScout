@@ -14,7 +14,7 @@ const PORT = process.env.PORT ? parseInt(process.env.PORT, 10) : 3000;
 app.use(express.json());
 
 // Persistent keyset configuration file path
-const DATA_DIR = path.resolve(__dirname, 'data');
+const DATA_DIR = path.resolve(import.meta.dirname, 'data');
 const KEYSET_FILE = path.resolve(DATA_DIR, 'ebay_keyset.json');
 
 // Initialize in-memory keyset from disk or env vars
