@@ -105,6 +105,8 @@ test('filterAndSortWatches correctly filters by search, country, and sorts by ge
       gemScore: 88,
       gemReasons: ['Swiss estate'],
       attentionLevel: 'low_attention',
+      ebayLiveSearchUrl: 'https://www.ebay.ch/sch/i.html?_nkw=Omega+Cal.+601',
+      ebaySearchQuery: 'Omega Cal. 601',
       dateAdded: new Date().toISOString(),
     },
     {
@@ -130,6 +132,8 @@ test('filterAndSortWatches correctly filters by search, country, and sorts by ge
       gemScore: 92,
       gemReasons: ['GUB icon'],
       attentionLevel: 'unnoticed_bin',
+      ebayLiveSearchUrl: 'https://www.ebay.de/sch/i.html?_nkw=GUB+Spezimatic',
+      ebaySearchQuery: 'GUB Spezimatic',
       dateAdded: new Date().toISOString(),
     },
   ];
