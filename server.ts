@@ -1,12 +1,10 @@
 import express from 'express';
 import path from 'path';
-import { fileURLToPath } from 'url';
 import { generateLiveListings } from './src/data/mockListings.ts';
 import { filterAndSortWatches, FilterOptions, SortField, WatchListing } from './src/utils/gemEvaluator.ts';
 import { fetchLiveEbayWatches } from './src/services/ebayApi.ts';
 
-const __filename = fileURLToPath(import.meta.url);
-const __dirname = path.dirname(__filename);
+
 
 const app = express();
 const PORT = process.env.PORT ? parseInt(process.env.PORT, 10) : 3000;
@@ -257,7 +255,7 @@ async function startServer() {
     app.use(vite.middlewares);
   } else {
     // Production static serving
-    const distPath = path.resolve(__dirname, 'dist');
+    const distPath = path.resolve(import.meta.dirname, 'dist');
     app.use(express.static(distPath));
     app.get('*', (_req, res) => {
       res.sendFile(path.resolve(distPath, 'index.html'));
